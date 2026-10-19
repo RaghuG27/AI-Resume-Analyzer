@@ -8,6 +8,10 @@ from app.core.database import engine
 from app.api.analysis import router as analysis_router
 from app.api.auth import router as auth_router
 from app.api.dashboard import router as dashboard_router
+from app.api.candidates import router as candidates_router
+from app.api.recruitment_applications import (
+    router as recruitment_applications_router,
+)
 
 app = FastAPI(
     title="AI Resume Analyzer",
@@ -31,6 +35,8 @@ app.include_router(jobs_router)
 app.include_router(analysis_router)
 app.include_router(auth_router)
 app.include_router(dashboard_router)
+app.include_router(candidates_router)
+app.include_router(recruitment_applications_router)
 
 @app.get("/")
 def root():

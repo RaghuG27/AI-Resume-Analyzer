@@ -25,6 +25,9 @@ from app.models.resume import Resume
 from app.core.security import get_current_user
 from app.models.user import User
 
+from app.utils.secure_upload import save_resume_upload
+
+
 router = APIRouter(
     prefix="/api/resumes",
     tags=["Resumes"]
