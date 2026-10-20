@@ -7,6 +7,7 @@ from app.schemas.job import JobCreate
 
 from app.core.security import get_current_user
 from app.models.user import User
+from app.core.csrf import require_csrf
 
 router = APIRouter(
     prefix="/api/jobs",
@@ -40,7 +41,8 @@ def get_jobs(
 def create_job(
     job_data: JobCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    dependencies=[Depends(require_csrf)]
 ):
 
     job = Job(

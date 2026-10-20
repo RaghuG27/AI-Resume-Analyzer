@@ -1,6 +1,7 @@
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi_limiter.depends import RateLimiter
 from sqlalchemy.orm import Session
 
 
@@ -17,6 +18,7 @@ from app.schemas.analysis import AnalysisRequest
 
 from app.worker.tasks import analyze_resume_task
 
+from app.core.csrf import require_csrf
 
 from celery.result import AsyncResult
 
@@ -70,11 +72,16 @@ def get_analysis_history(
     ]
     
 
-@router.post("/")
+@router.post("/",dependencies=[
+        Depends(RateLimiter(times=10, seconds=3600)),
+        Depends(require_csrf),
+    ],)
 def create_analysis(
     request: AnalysisRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    dependencies=[Depends(require_csrf)]
+    
 ):
     # ---------------------------------------------
     # 1. Convert IDs

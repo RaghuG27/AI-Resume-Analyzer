@@ -1,13 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException , Response
 from sqlalchemy.orm import Session
 
+
+from fastapi_limiter.depends import RateLimiter
+from fastapi import Depends, Response
+
+from app.core.csrf import require_csrf
+
 from app.core.database import get_db
 from app.core.security import (
     hash_password,
     verify_password,
     create_access_token
 )
-
+from app.core.config import settings
 from app.models.user import User
 from app.schemas.auth import (
     RegisterRequest,
@@ -16,13 +22,16 @@ from app.schemas.auth import (
 
 
 from app.core.security import get_current_user
+from app.core.csrf import generate_csrf_token, set_csrf_cookie
 
 router = APIRouter(
     prefix="/api/auth",
     tags=["Authentication"]
 )
 
-@router.post("/register")
+@router.post("/register",dependencies=[
+        Depends(RateLimiter(times=5, seconds=60)),
+    ],)
 def register(
     request: RegisterRequest,
     db: Session = Depends(get_db)
@@ -56,11 +65,17 @@ def register(
     }
 
 
-@router.post("/login")
+
+
+
+@router.post("/login",dependencies=[
+        Depends(RateLimiter(times=5, seconds=60)),
+    ],)
 def login(
     request: LoginRequest,
     response: Response,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    
 ):
 
     user = db.query(User).filter(
@@ -92,10 +107,17 @@ def login(
         key="access_token",
         value=access_token,
         httponly=True,
-        secure=False,       # True when deployed with HTTPS
+        secure=settings.ENVIRONMENT == "production",       # True when deployed with HTTPS
         samesite="lax",
-        max_age=60 * 60,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
+    )
+
+    csrf_token = generate_csrf_token()
+    set_csrf_cookie(
+        response,
+        csrf_token,
+        secure=settings.ENVIRONMENT == "production",
     )
 
     return {
@@ -103,16 +125,33 @@ def login(
     }
 
 
-@router.post("/logout")
+
+
+
+@router.post(
+    "/logout",
+    dependencies=[Depends(require_csrf)],
+)
 def logout(response: Response):
+    secure = settings.ENVIRONMENT == "production"
+
     response.delete_cookie(
         key="access_token",
         path="/",
+        secure=secure,
+        httponly=True,
+        samesite="lax",
     )
 
-    return {
-        "message": "Logged out successfully",
-    }
+    response.delete_cookie(
+        key="csrf_token",
+        path="/",
+        secure=secure,
+        httponly=False,
+        samesite="lax",
+    )
+
+    return {"message": "Logged out successfully"}
 
 
 @router.get("/me")

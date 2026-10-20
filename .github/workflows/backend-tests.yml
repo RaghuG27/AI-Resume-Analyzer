@@ -1,0 +1,62 @@
+
+name: Backend Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run FastAPI Tests
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: "sqlite:///./test.db"
+      JWT_SECRET_KEY: "ci-only-test-secret-not-for-production"
+      JWT_ALGORITHM: "HS256"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "60"
+      GEMINI_API_KEY: "ci-dummy-key"
+      REDIS_URL: "redis://localhost:6379/0"
+      ENVIRONMENT: "test"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest httpx
+
+      - name: Check Redis connection
+        run: |
+          python -c "import redis; redis.Redis.from_url('${REDIS_URL}').ping(); print('Redis connection successful')"
+
+      - name: Run automated tests
+        run: |
+          python -m pytest -q

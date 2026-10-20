@@ -7,6 +7,7 @@ from fastapi import (
     HTTPException,
     Depends
 )
+from fastapi_limiter.depends import RateLimiter
 
 from app.services.resume_parser import (
     extract_resume_text
@@ -24,6 +25,9 @@ from app.models.resume import Resume
 
 from app.core.security import get_current_user
 from app.models.user import User
+from app.core.csrf import require_csrf
+from app.utils.secure_upload import save_resume_upload
+
 
 router = APIRouter(
     prefix="/api/resumes",
@@ -64,11 +68,14 @@ def get_resumes(
 
     
 
-@router.post("/upload")
+@router.post("/upload",dependencies=[
+        Depends(RateLimiter(times=5, seconds=60)),
+    ],)
 async def upload_resume(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    dependencies=[Depends(require_csrf)],
 ):
 
     try:
