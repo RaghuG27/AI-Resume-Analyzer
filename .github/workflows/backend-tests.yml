@@ -1,3 +1,4 @@
+
 name: Backend Tests
 
 on:
@@ -15,6 +16,17 @@ jobs:
     name: Run FastAPI Tests
     runs-on: ubuntu-latest
 
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       DATABASE_URL: "sqlite:///./test.db"
       JWT_SECRET_KEY: "ci-only-test-secret-not-for-production"
@@ -22,6 +34,7 @@ jobs:
       ACCESS_TOKEN_EXPIRE_MINUTES: "60"
       GEMINI_API_KEY: "ci-dummy-key"
       REDIS_URL: "redis://localhost:6379/0"
+      ENVIRONMENT: "test"
 
     steps:
       - name: Checkout repository
@@ -37,9 +50,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest httpx
+          python -m pip install -r requirements.txt
+          python -m pip install pytest httpx
+
+      - name: Check Redis connection
+        run: |
+          python -c "import redis; redis.Redis.from_url('${REDIS_URL}').ping(); print('Redis connection successful')"
 
       - name: Run automated tests
         run: |
-          pytest -q
+          python -m pytest -q

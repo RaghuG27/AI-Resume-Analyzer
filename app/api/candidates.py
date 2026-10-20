@@ -5,6 +5,8 @@ from typing import Literal
 from sqlalchemy import String, cast, or_
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi_limiter.depends import RateLimiter
+
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -17,6 +19,7 @@ from app.schemas.candidate import (
 )
 from app.schemas.candidate_extraction import CandidateProfileExtraction
 from app.services.candidate_extractor import extract_candidate_profile
+from app.core.csrf import require_csrf
 
 router = APIRouter(prefix="/api/candidates", tags=["Candidates"])
 
@@ -50,6 +53,11 @@ def validate_resume_ownership(
     "/",
     response_model=CandidateRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        Depends(RateLimiter(times=5, seconds=60)),
+        Depends(require_csrf),
+    ],
+    
 )
 def create_candidate(
     payload: CandidateCreate,
@@ -162,7 +170,7 @@ def get_candidate(
     return candidate
 
 
-@router.patch("/{candidate_id}", response_model=CandidateRead)
+@router.patch("/{candidate_id}", response_model=CandidateRead, dependencies=[Depends(require_csrf)])
 def update_candidate(
     candidate_id: UUID,
     payload: CandidateUpdate,
@@ -217,6 +225,7 @@ def update_candidate(
 @router.delete(
     "/{candidate_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_csrf)]
 )
 def delete_candidate(
     candidate_id: UUID,
@@ -248,6 +257,7 @@ def delete_candidate(
     "/from-resume/{resume_id}",
     response_model=CandidateRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf)]
 )
 def create_candidate_from_resume(
     resume_id: UUID,

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from app.core.database import get_db
+from app.core.csrf import require_csrf
 from app.core.security import get_current_user
 from app.models import Candidate, Job, RecruitmentApplication, RecruitmentStatusHistory
 from app.schemas.recruitment_application import (
@@ -33,6 +34,7 @@ def create_application(
     payload: RecruitmentApplicationCreate,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
+    dependencies=[Depends(require_csrf)]
 ):
     candidate = (
         db.query(Candidate)
@@ -215,6 +217,7 @@ def update_application_status(
     payload: RecruitmentStatusUpdate,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
+    dependencies=[Depends(require_csrf)],
 ):
     if payload.status not in ALLOWED_TRANSITIONS:
         raise HTTPException(
