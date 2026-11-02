@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
     REDIS_URL: str = "redis://localhost:6379/0"
-    RATE_LIMIT_REDIS_URL: str = "redis://localhost:6379/1"
+    RATE_LIMIT_REDIS_URL: str | None = None
 
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587

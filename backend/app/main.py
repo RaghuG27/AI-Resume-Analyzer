@@ -40,27 +40,38 @@ from app.api.admin import router as admin_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    redis_url = (
+        settings.RATE_LIMIT_REDIS_URL
+        or settings.REDIS_URL
+    )
+
     redis_client = redis.from_url(
-        settings.RATE_LIMIT_REDIS_URL,
+        redis_url,
         encoding="utf-8",
         decode_responses=True,
+        socket_connect_timeout=10,
+        socket_timeout=10,
+        health_check_interval=30,
     )
 
     try:
-        # Verify Redis is reachable.
         await redis_client.ping()
 
-        # Initialize Redis-backed API rate limiting.
         await FastAPILimiter.init(redis_client)
 
         app.state.rate_limit_redis = redis_client
 
+        logging.info("Redis connection established successfully")
+
         yield
 
+    except Exception:
+        logging.exception("Application startup or runtime failed")
+        raise
+
     finally:
-        # Close the Redis connection during shutdown,
-        # including if initialization or application startup fails.
         await redis_client.aclose()
+        logging.info("Redis connection closed")
 
 # Configuring the root logger during application startup initialization so that application log messages can use your JSON formatter.
 configure_logging()
