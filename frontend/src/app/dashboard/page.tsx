@@ -21,6 +21,7 @@ import AppShell from "@/components/layout/AppShell";
 import WelcomeHeader from "@/components/dashboard/WelcomeHeader";
 import StatCard from "@/components/dashboard/StatCard";
 import RecentAnalysis from "@/components/dashboard/RecentAnalysis";
+import { PageSkeleton } from "@/components/ui/LoadingSkeleton";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -73,24 +74,7 @@ const [loadingStats, setLoadingStats] = useState(true);
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="icon-tile mx-auto flex h-12 w-12 border border-slate-200 bg-slate-50 text-slate-400">
-            <Sparkles
-              size={22}
-              className="animate-pulse"
-            />
-          </div>
-
-          <p className="mt-4 text-sm font-medium text-slate-900">
-            Loading your workspace...
-          </p>
-
-          <p className="mt-1 text-xs text-slate-500">
-            Preparing your career insights
-          </p>
-        </div>
-      </main>
+      <AppShell><PageSkeleton /></AppShell>
     );
   }
 
@@ -155,7 +139,7 @@ const [loadingStats, setLoadingStats] = useState(true);
                 >
                   <Plus size={17} />
 
-                  Add job description
+                  Explore jobs
                 </button>
               </div>
             </div>

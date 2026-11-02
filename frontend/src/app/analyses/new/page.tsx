@@ -1,364 +1,84 @@
 "use client";
 
-import {
-  Suspense,
-  useEffect,
-  useState,
-} from "react";
-
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-
-import {
-  ArrowLeft,
-  ArrowRight,
-  BriefcaseBusiness,
-  FileText,
-  Loader2,
-  Sparkles,
-  Target,
-  AlertCircle,
-} from "lucide-react";
-
 import Link from "next/link";
-
+import { AlertCircle, ArrowLeft, FileText, Loader2, Sparkles } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
-
-import {
-  getResumes,
-  ResumeResponse,
-} from "@/lib/resume";
-
-import {
-  getJobs,
-  JobResponse,
-} from "@/lib/jobs";
-
-import {
-  createAnalysis,
-} from "@/lib/analysis";
+import { getResumes, ResumeResponse } from "@/lib/resume";
+import { createAnalysis } from "@/lib/analysis";
+import { PageSkeleton, Skeleton } from "@/components/ui/LoadingSkeleton";
 
 function NewAnalysisContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-
-  const jobIdParam = searchParams.get("jobId");
-  const resumeIdParam = searchParams.get("resumeId");
-
-  const [resumes, setResumes] =
-    useState<ResumeResponse[]>([]);
-
-  const [jobs, setJobs] =
-    useState<JobResponse[]>([]);
-
-  const [selectedResume, setSelectedResume] =
-    useState("");
-
-  const [selectedJob, setSelectedJob] =
-    useState("");
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [submitting, setSubmitting] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
+  const [resumes, setResumes] = useState<ResumeResponse[]>([]);
+  const [resumeId, setResumeId] = useState(searchParams.get("resumeId") ?? "");
+  const [jobId, setJobId] = useState(searchParams.get("jobId") ?? "");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const [
-          resumeData,
-          jobData,
-        ] = await Promise.all([
-          getResumes(),
-          getJobs(),
-        ]);
+    getResumes()
+      .then((items) => {
+        setResumes(items);
+        if (!resumeId && items.length) setResumeId(items[0].id);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load resumes."))
+      .finally(() => setLoading(false));
+  // Only load the resume list when the screen is first mounted.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-        setResumes(resumeData);
-        setJobs(jobData);
-
-        if (resumeData.length > 0) {
-          const preselectedResume =
-            resumeIdParam &&
-            resumeData.some(
-              (resume) => resume.id === resumeIdParam
-            )
-              ? resumeIdParam
-              : resumeData[0].id;
-
-          setSelectedResume(preselectedResume);
-        }
-
-        if (jobData.length > 0) {
-          const preselectedJob =
-            jobIdParam &&
-            jobData.some((job) => job.id === jobIdParam)
-              ? jobIdParam
-              : jobData[0].id;
-
-          setSelectedJob(preselectedJob);
-        }
-      } catch (error) {
-        setError(
-          error instanceof Error
-            ? error.message
-            : "Failed to load your resumes and jobs."
-        );
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadData();
-  }, [jobIdParam, resumeIdParam]);
-
-  async function handleAnalyze() {
-    if (!selectedResume) {
-      setError(
-        "Please select a resume."
-      );
-      return;
-    }
-
-    if (!selectedJob) {
-      setError(
-        "Please select a job description."
-      );
-      return;
-    }
-
+  async function submit() {
     setError("");
+    if (!resumeId) return setError("Select a resume first.");
+    if (!jobId.trim()) return setError("Enter a job ID that belongs to your account.");
     setSubmitting(true);
-
     try {
-      const analysis =
-        await createAnalysis({
-          resume_id: selectedResume,
-          job_id: selectedJob,
-        });
-
-      router.push(
-        `/analyses/processing/${analysis.task_id}`
-      );
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to start analysis."
-      );
-
+      const result = await createAnalysis({ resume_id: resumeId, job_id: jobId.trim() });
+      router.push(`/analyses/processing/${result.task_id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start analysis.");
       setSubmitting(false);
     }
   }
 
-  if (loading) {
-    return (
-      <AppShell>
-        <div className="flex min-h-[70vh] items-center justify-center">
-          <div className="text-center">
-            <div className="icon-tile mx-auto flex h-14 w-14 border border-slate-200 bg-slate-50 text-slate-400">
-              <Loader2
-                size={24}
-                className="animate-spin"
-              />
-            </div>
-
-            <p className="mt-4 text-sm font-semibold text-slate-900">
-              Loading your workspace
-            </p>
-
-            <p className="mt-1 text-xs text-slate-500">
-              Finding your resumes and jobs...
-            </p>
-          </div>
-        </div>
-      </AppShell>
-    );
-  }
-
   return (
     <AppShell>
-      <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-
-        <Link
-          href="/dashboard"
-          className="mb-6 inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
-        >
-          <ArrowLeft size={15} />
-
-          Dashboard
-        </Link>
-
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-600 text-white">
-            <Sparkles size={22} />
-          </div>
-
-          <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-            Create an <span className="text-slate-900">analysis</span>
-          </h1>
-
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
-            Select a resume and a target job.
-            We'll compare them using our AI analysis
-            pipeline.
-          </p>
+      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+        <Link href="/analyses" className="mb-6 inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-900"><ArrowLeft size={15} /> Analyses</Link>
+        <div className="mb-7">
+          <div className="icon-tile flex h-12 w-12"><Sparkles size={22} /></div>
+          <h1 className="mt-4 text-3xl font-bold text-slate-900">Create an analysis</h1>
+          <p className="mt-2 text-sm text-slate-500">Choose one of your uploaded resumes and provide the ID of a job description owned by your account.</p>
         </div>
 
-        {/* Selection */}
-        <div className="grid gap-5 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
-
-          {/* Resume */}
-          <SelectionCard
-            title="Your resume"
-            subtitle="Select the resume you want to analyze"
-            icon={FileText}
-            iconClass="bg-slate-50 text-slate-700"
-          >
-            {resumes.length === 0 ? (
-              <EmptyState
-                text="No resumes uploaded yet."
-                href="/resumes"
-                action="Upload resume"
-              />
-            ) : (
-              <select
-                value={selectedResume}
-                onChange={(event) =>
-                  setSelectedResume(
-                    event.target.value
-                  )
-                }
-                className="field px-4 py-3 text-sm font-medium [&>option]:bg-white [&>option]:text-slate-900"
-              >
-                {resumes.map((resume) => (
-                  <option
-                    key={resume.id}
-                    value={resume.id}
-                  >
-                    {resume.original_filename}
-                  </option>
-                ))}
-              </select>
-            )}
-          </SelectionCard>
-
-          {/* VS */}
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-xs font-bold text-slate-500">
-            VS
-          </div>
-
-          {/* Job */}
-          <SelectionCard
-            title="Target job"
-            subtitle="Select the position you're targeting"
-            icon={BriefcaseBusiness}
-            iconClass="bg-slate-50 text-slate-700"
-          >
-            {jobs.length === 0 ? (
-              <EmptyState
-                text="No jobs added yet."
-                href="/jobs"
-                action="Add job"
-              />
-            ) : (
-              <select
-                value={selectedJob}
-                onChange={(event) =>
-                  setSelectedJob(
-                    event.target.value
-                  )
-                }
-                className="field px-4 py-3 text-sm font-medium [&>option]:bg-white [&>option]:text-slate-900"
-              >
-                {jobs.map((job) => (
-                  <option
-                    key={job.id}
-                    value={job.id}
-                  >
-                    {job.title}
-                  </option>
-                ))}
-              </select>
-            )}
-          </SelectionCard>
-        </div>
-
-        {/* Selected status */}
-        <div className="panel mt-6 p-5">
-          <div className="flex items-start gap-3">
-            <div className="icon-tile flex h-9 w-9 shrink-0 border border-slate-200 bg-slate-50 text-slate-700">
-              <Target size={17} />
-            </div>
-
+        <div className="panel space-y-6 p-5 sm:p-7">
+          {loading ? <div className="space-y-3"><Skeleton className="h-4 w-24" /><Skeleton className="h-12 w-full" /></div> :
+            resumes.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-5 text-sm text-slate-600">You need to upload a resume before creating an analysis. <Link className="font-semibold text-violet-600" href="/resumes">Upload a resume</Link>.</div> :
             <div>
-              <p className="text-sm font-semibold text-slate-900">
-                Ready to analyze
-              </p>
-
-              <p className="mt-1 text-xs leading-5 text-slate-500">
-                The AI will identify job requirements,
-                compare them with evidence in your resume,
-                and calculate the analysis scores.
-              </p>
+              <label className="mb-2 block text-sm font-semibold text-slate-800">Resume</label>
+              <div className="relative">
+                <FileText className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+                <select value={resumeId} onChange={(e) => setResumeId(e.target.value)} className="field h-12 pl-10 pr-3 text-sm">
+                  {resumes.map((resume) => <option key={resume.id} value={resume.id}>{resume.original_filename}</option>)}
+                </select>
+              </div>
+            </div>
+          }
+          <div>
+            <label htmlFor="job-id" className="mb-2 block text-sm font-semibold text-slate-800">Your job description ID</label>
+            <input id="job-id" value={jobId} onChange={(e) => setJobId(e.target.value)} placeholder="Paste a job UUID owned by your account" className="field h-12 px-4 text-sm" />
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+              <p className="font-semibold">Backend limitation</p>
+              <p className="mt-1">The supplied backend lets you list published company jobs, but analysis creation only accepts a job whose owner is your user account. It does not currently provide a personal job-description create/list endpoint. A marketplace job ID will normally be rejected by analysis creation.</p>
             </div>
           </div>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="mt-5 flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-rose-100 text-rose-600">
-              <AlertCircle size={17} />
-            </div>
-
-            <div>
-              <p className="text-sm font-semibold text-rose-600">
-                Unable to start analysis
-              </p>
-
-              <p className="mt-1 text-xs leading-5 text-rose-500">
-                {error}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Analyze */}
-        <div className="mt-8 flex justify-end">
-          <button
-            onClick={handleAnalyze}
-            disabled={
-              submitting ||
-              resumes.length === 0 ||
-              jobs.length === 0
-            }
-            className="btn-primary group w-full px-6 py-3.5 disabled:opacity-50 sm:w-auto"
-          >
-            {submitting ? (
-              <>
-                <Loader2
-                  size={17}
-                  className="animate-spin"
-                />
-
-                Starting analysis...
-              </>
-            ) : (
-              <>
-                <Sparkles size={17} />
-
-                Analyze resume
-
-                <ArrowRight
-                  size={16}
-                  className="transition-transform group-hover:translate-x-1"
-                />
-              </>
-            )}
+          {error && <div role="alert" className="flex gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700"><AlertCircle size={17} />{error}</div>}
+          <button onClick={() => void submit()} disabled={loading || submitting || !resumes.length} className="btn-primary w-full">
+            {submitting ? <><Loader2 size={16} className="animate-spin" /> Starting analysis...</> : <><Sparkles size={16} /> Start analysis</>}
           </button>
         </div>
       </div>
@@ -367,83 +87,5 @@ function NewAnalysisContent() {
 }
 
 export default function NewAnalysisPage() {
-  return (
-    <Suspense
-      fallback={
-        <AppShell>
-          <div className="flex min-h-[70vh] items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-          </div>
-        </AppShell>
-      }
-    >
-      <NewAnalysisContent />
-    </Suspense>
-  );
-}
-
-interface SelectionCardProps {
-  title: string;
-  subtitle: string;
-  icon: React.ElementType;
-  iconClass: string;
-  children: React.ReactNode;
-}
-
-function SelectionCard({
-  title,
-  subtitle,
-  icon: Icon,
-  iconClass,
-  children,
-}: SelectionCardProps) {
-  return (
-    <div className="panel-2 p-5 sm:p-6">
-      <div className="mb-5 flex items-center gap-3">
-        <div
-          className={`flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 ${iconClass}`}
-        >
-          <Icon size={20} />
-        </div>
-
-        <div>
-          <h2 className="text-sm font-semibold text-slate-900">
-            {title}
-          </h2>
-
-          <p className="mt-0.5 text-xs text-slate-500">
-            {subtitle}
-          </p>
-        </div>
-      </div>
-
-      {children}
-    </div>
-  );
-}
-
-function EmptyState({
-  text,
-  href,
-  action,
-}: {
-  text: string;
-  href: string;
-  action: string;
-}) {
-  return (
-    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
-      <p className="text-xs text-slate-500">
-        {text}
-      </p>
-
-      <Link
-        href={href}
-        className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-900 hover:text-slate-700"
-      >
-        {action}
-        <ArrowRight size={13} />
-      </Link>
-    </div>
-  );
+  return <Suspense fallback={<AppShell><PageSkeleton /></AppShell>}><NewAnalysisContent /></Suspense>;
 }

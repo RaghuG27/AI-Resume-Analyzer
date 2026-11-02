@@ -1,187 +1,255 @@
+
 "use client";
 
-import {
-  ArrowLeft,
-  FileText,
-  ShieldCheck,
-  Sparkles,
-  Zap,
-} from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
-import Link from "next/link";
+import {
+  FileText,
+  RefreshCw,
+  Sparkles,
+  UploadCloud,
+  X,
+} from "lucide-react";
 
 import AppShell from "@/components/layout/AppShell";
 import ResumeUploader from "@/components/resume/ResumeUploader";
+import { ListSkeleton } from "@/components/ui/LoadingSkeleton";
+import { getCurrentUser, UserRole } from "@/lib/auth";
+
+import {
+  getResumeFile,
+  getResumes,
+  ResumeResponse,
+} from "@/lib/resume";
 
 export default function ResumesPage() {
+  const router = useRouter();
+  const [resumes, setResumes] = useState<ResumeResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const [openingResumeId, setOpeningResumeId] =
+    useState<string | null>(null);
+  const [showUploader, setShowUploader] = useState(false);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const data = await getResumes();
+      setResumes(data);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load resumes."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+    void getCurrentUser().then((user) => setUserRole(user.role)).catch(() => setUserRole(null));
+  }, [load]);
+
+  // Open the original uploaded resume.
+  const handleOpenResume = async (resume: ResumeResponse) => {
+    if (openingResumeId) return;
+
+    // Open a blank tab immediately to avoid popup blockers.
+    const previewTab = window.open("about:blank", "_blank");
+
+    if (!previewTab) {
+      setError(
+        "Your browser blocked the resume preview. Please allow pop-ups and try again."
+      );
+      return;
+    }
+
+    previewTab.document.title = "Opening resume...";
+
+    previewTab.document.body.innerHTML =
+      '<p style="font-family:sans-serif;padding:24px;color:#475569;">Opening your resume...</p>';
+
+    setOpeningResumeId(resume.id);
+    setError("");
+
+    try {
+      const blob = await getResumeFile(resume.id);
+
+      const fileUrl = URL.createObjectURL(blob);
+
+      previewTab.location.href = fileUrl;
+
+      // Keep the object URL alive while the preview is open.
+    } catch (err) {
+      previewTab.close();
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to open this resume."
+      );
+    } finally {
+      setOpeningResumeId(null);
+    }
+  };
+
   return (
     <AppShell>
-      <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-
-        {/* Breadcrumb */}
-        <Link
-          href="/dashboard"
-          className="mb-6 inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-400 transition hover:bg-slate-50 hover:text-slate-900"
-        >
-          <ArrowLeft size={15} />
-
-          Dashboard
-        </Link>
-
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-600 text-white">
-            <FileText size={22} />
+      <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-violet-700">RESUME LIBRARY</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
+              Your resumes
+            </h1>
+            <p className="mt-2 text-sm text-slate-500">
+              Manage your uploaded resumes and start an analysis whenever you're ready.
+            </p>
           </div>
-
-          <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-            Upload your <span className="gradient-text">resume</span>
-          </h1>
-
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
-            Start by uploading your latest resume.
-            We'll extract the relevant information and
-            prepare it for AI-powered job matching.
-          </p>
+          <button
+            type="button"
+            onClick={() => setShowUploader((visible) => !visible)}
+            className="btn-primary shrink-0 self-start sm:self-auto"
+            aria-expanded={showUploader}
+          >
+            {showUploader ? <X size={17} /> : <UploadCloud size={17} />}
+            {showUploader ? "Close upload" : "Upload resume"}
+          </button>
         </div>
 
-        {/* Main upload card */}
-        <section className="panel p-4 sm:p-6 lg:p-8">
-          <ResumeUploader />
-        </section>
-
-        {/* Feature cards */}
-        <section className="mt-6 grid gap-4 sm:grid-cols-3">
-          <InfoCard
-            icon={FileText}
-            iconClass="bg-sky-50 text-sky-600"
-            title="PDF & DOCX"
-            description="Upload your resume in either supported format."
-          />
-
-          <InfoCard
-            icon={ShieldCheck}
-            iconClass="bg-emerald-50 text-emerald-600"
-            title="Authenticated"
-            description="Your resume is linked to your account."
-          />
-
-          <InfoCard
-            icon={Sparkles}
-            iconClass="bg-violet-50 text-violet-600"
-            title="AI ready"
-            description="Your resume will be prepared for analysis."
-          />
-        </section>
-
-        {/* Process */}
-        <section className="panel mt-6 p-6 sm:p-8">
-          <div className="flex items-start gap-4">
-            <div className="icon-tile flex h-10 w-10 shrink-0 border border-slate-200 bg-slate-50 text-slate-700">
-              <Zap size={18} />
+        {showUploader && (
+          <section className="panel mb-8 p-5 sm:p-7">
+            <div className="mb-4">
+              <h2 className="font-semibold text-slate-900">Add a resume</h2>
+              <p className="mt-1 text-sm text-slate-500">PDF or DOCX files are supported.</p>
             </div>
+            <ResumeUploader onUploaded={() => void load()} />
+          </section>
+        )}
 
+        <section>
+          <div className="mb-4 flex items-center justify-between gap-4">
             <div>
-              <h2 className="font-semibold text-slate-900">
-                What happens next?
-              </h2>
-
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                Once your resume is uploaded, you'll
-                add a job description. ResumeAI will
-                then compare the requirements against
-                your resume and generate detailed
-                insights.
+              <h2 className="text-lg font-semibold text-slate-900">All resumes</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                {resumes.length} {resumes.length === 1 ? "file" : "files"} in your library
               </p>
-
-              <div className="mt-5 flex flex-wrap gap-2">
-                <Step number="1" text="Upload resume" />
-
-                <Arrow />
-
-                <Step
-                  number="2"
-                  text="Add job"
-                />
-
-                <Arrow />
-
-                <Step
-                  number="3"
-                  text="Analyze"
-                />
-
-                <Arrow />
-
-                <Step
-                  number="4"
-                  text="View insights"
-                />
-              </div>
             </div>
+            <button
+              onClick={() => void load()}
+              className="btn-ghost"
+              disabled={loading}
+              aria-label="Refresh resumes"
+            >
+              <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
           </div>
+
+          {/* Error */}
+          {error && (
+            <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+              {error}
+            </div>
+          )}
+
+          {/* Loading */}
+          {loading ? (
+            <ListSkeleton rows={4} />
+          ) : resumes.length === 0 ? (
+
+            <div className="panel rounded-2xl px-6 py-16 text-center">
+              <div className="icon-tile mx-auto flex h-12 w-12 items-center justify-center">
+                <FileText size={21} />
+              </div>
+              <h3 className="mt-4 font-semibold text-slate-900">No resumes yet</h3>
+              <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">
+                Upload a PDF or DOCX to keep it here and use it for analysis.
+              </p>
+              <button type="button" onClick={() => setShowUploader(true)} className="btn-primary mt-5">
+                <UploadCloud size={16} /> Upload your first resume
+              </button>
+            </div>
+
+          ) : (
+
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              {resumes.map((resume) => (
+                <div
+                  key={resume.id}
+                  className="flex flex-col gap-4 border-b border-slate-100 p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:px-5"
+                >
+
+                  {/* File information */}
+                  <div className="flex min-w-0 items-center gap-3">
+
+                    {/* Clickable file icon */}
+                    <button
+                      type="button"
+                      onClick={() => void handleOpenResume(resume)}
+                      disabled={openingResumeId !== null}
+                      title={`Open ${resume.original_filename}`}
+                      aria-label={`Open uploaded resume ${resume.original_filename}`}
+                      className="icon-tile flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-xl transition hover:bg-violet-100 hover:text-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {openingResumeId === resume.id ? (
+                        <RefreshCw
+                          size={19}
+                          className="animate-spin"
+                        />
+                      ) : (
+                        <FileText size={19} />
+                      )}
+                    </button>
+
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-slate-900">
+                        {resume.original_filename}
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-500">
+                        {new Date(
+                          resume.created_at
+                        ).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex flex-wrap gap-2 sm:justify-end">
+
+                    <button
+                      onClick={() => router.push(`/analyses/new?resumeId=${encodeURIComponent(resume.id)}`)}
+                      className="btn-ghost"
+                    >
+                      <Sparkles size={15} />
+                      Analyze
+                    </button>
+
+                    {userRole === "recruiter" && (
+                      <button
+                        onClick={() => router.push(`/candidates?resumeId=${encodeURIComponent(resume.id)}`)}
+                        className="btn-primary"
+                      >
+                        Create candidate profile
+                      </button>
+                    )}
+
+                  </div>
+                </div>
+              ))}
+            </div>
+
+          )}
         </section>
       </div>
     </AppShell>
-  );
-}
-
-interface InfoCardProps {
-  icon: React.ElementType;
-  iconClass: string;
-  title: string;
-  description: string;
-}
-
-function InfoCard({
-  icon: Icon,
-  iconClass,
-  title,
-  description,
-}: InfoCardProps) {
-  return (
-    <div className="panel-2 card-hover p-5">
-      <div
-        className={`flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 ${iconClass}`}
-      >
-        <Icon size={18} />
-      </div>
-
-      <h3 className="mt-4 text-sm font-semibold text-slate-900">
-        {title}
-      </h3>
-
-      <p className="mt-1.5 text-xs leading-5 text-slate-500">
-        {description}
-      </p>
-    </div>
-  );
-}
-
-function Step({
-  number,
-  text,
-}: {
-  number: string;
-  text: string;
-}) {
-  return (
-    <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white">
-        {number}
-      </span>
-
-      <span className="text-xs font-medium text-slate-700">
-        {text}
-      </span>
-    </div>
-  );
-}
-
-function Arrow() {
-  return (
-    <span className="hidden items-center text-slate-400 sm:flex">
-      →
-    </span>
   );
 }

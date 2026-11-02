@@ -1,0 +1,118 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Initialize Backend Database",
+      "type": "process",
+      "command": "cmd.exe",
+      "args": ["/C", "env\\Scripts\\python.exe -m app.init_db"],
+      "options": {
+        "cwd": "${workspaceFolder}\\backend"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Backend API",
+      "type": "process",
+      "command": "cmd.exe",
+      "args": [
+        "/K",
+        "set \"VIRTUAL_ENV=%CD%\\env\" && set \"PATH=%CD%\\env\\Scripts;%PATH%\" && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}\\backend"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "resumeai-backend",
+        "pattern": {
+          "regexp": "^NEVER_MATCH_TASK_OUTPUT$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*$",
+          "endsPattern": "^NEVER_MATCH_TASK_END$"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": false
+      }
+    },
+    {
+      "label": "Run Celery Worker",
+      "type": "process",
+      "command": "cmd.exe",
+      "args": [
+        "/K",
+        "set \"VIRTUAL_ENV=%CD%\\env\" && set \"PATH=%CD%\\env\\Scripts;%PATH%\" && python -m celery -A app.worker.celery_app.celery_app worker --loglevel=info --pool=solo"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}\\backend"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "resumeai-celery",
+        "pattern": {
+          "regexp": "^NEVER_MATCH_TASK_OUTPUT$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*$",
+          "endsPattern": "^NEVER_MATCH_TASK_END$"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": false
+      }
+    },
+    {
+      "label": "Run Frontend",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "dev"],
+      "options": {
+        "cwd": "${workspaceFolder}\\frontend"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "resumeai-frontend",
+        "pattern": {
+          "regexp": "^NEVER_MATCH_TASK_OUTPUT$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*$",
+          "endsPattern": "^NEVER_MATCH_TASK_END$"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": false
+      }
+    },
+    {
+      "label": "Start Application Services",
+      "dependsOn": [
+        "Run Backend API",
+        "Run Celery Worker",
+        "Run Frontend"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Application",
+      "dependsOn": [
+        "Initialize Backend Database",
+        "Start Application Services"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    }
+  ]
+}

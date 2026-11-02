@@ -7,12 +7,12 @@ import {
   ChevronRight,
   FileText,
   Briefcase,
-  Loader2,
   Plus,
   Search,
 } from "lucide-react";
 
 import AppShell from "@/components/layout/AppShell";
+import { ListSkeleton } from "@/components/ui/LoadingSkeleton";
 import {
   getAnalysisHistory,
   AnalysisHistoryItem,
@@ -91,12 +91,7 @@ export default function AnalysesPage() {
 
         {/* Loading */}
         {loading && (
-          <div className="flex min-h-[50vh] items-center justify-center">
-            <div className="flex items-center gap-3 text-sm text-slate-500">
-              <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-              Loading analyses...
-            </div>
-          </div>
+          <ListSkeleton rows={4} />
         )}
 
         {/* Error */}
@@ -118,8 +113,7 @@ export default function AnalysesPage() {
             </h2>
 
             <p className="mx-auto mt-1.5 max-w-sm text-sm text-slate-500">
-              Upload a resume, add a job description, and run your
-              first AI-powered analysis.
+              Choose an uploaded resume and a job description owned by your account to run an analysis.
             </p>
 
             <button
