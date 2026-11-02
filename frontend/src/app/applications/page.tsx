@@ -33,7 +33,19 @@ export default function ApplicationsPage() {
     if (history[id]) { setHistory((old) => { const copy = { ...old }; delete copy[id]; return copy; }); return; }
     try {
       const rows = await getApplicationHistory(id);
-      setHistory((old) => ({ ...old, [id]: rows.map((row) => `${row.old_status ?? "Created"} → ${row.new_status} · ${(row.created_at || row.changed_at ? new Date(row.created_at || row.changed_at || "").toLocaleString() : "date unavailable")}`) }));
+      setHistory((old) => ({
+  ...old,
+  [id]: rows.map((row) => {
+    const dateValue = row.created_at ?? row.changed_at;
+
+    const formattedDate =
+      typeof dateValue === "string" || typeof dateValue === "number"
+        ? new Date(dateValue).toLocaleString()
+        : "date unavailable";
+
+    return `${row.old_status ?? "Created"} → ${row.new_status} · ${formattedDate}`;
+  }),
+}));
     } catch (err) { setError(err instanceof Error ? err.message : "Could not load application history."); }
   }
 
