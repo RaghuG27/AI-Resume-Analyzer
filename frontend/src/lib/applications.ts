@@ -30,8 +30,8 @@ export interface ApplicationHistoryItem {
   application_id: string;
   changed_by_user_id?: string;
   old_status?: string | null;
-  new_status: string;
-  created_at: string;
+  new_status: string | null;
+  created_at: string | null;
   [key: string]: unknown;
 }
 
