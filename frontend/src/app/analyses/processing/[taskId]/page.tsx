@@ -1,286 +1,95 @@
 "use client";
 
-import {
-  useEffect,
-  useState,
-} from "react";
-
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-
-import {
-  AlertCircle,
-  Brain,
-  CheckCircle2,
-  FileSearch,
-  Loader2,
-  Sparkles,
-} from "lucide-react";
-
+import { AlertCircle, Brain, CheckCircle2, FileSearch, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
-
-import {
-  getAnalysisStatus,
-  AnalysisStatusResponse,
-} from "@/lib/analysis";
+import { getAnalysisStatus, AnalysisStatusResponse } from "@/lib/analysis";
 
 export default function AnalysisProcessingPage() {
-  const params = useParams();
-
+  const params = useParams<{ taskId: string }>();
   const router = useRouter();
+  const taskId = params.taskId;
+  const [status, setStatus] = useState<AnalysisStatusResponse | null>(null);
+  const [error, setError] = useState("");
+  const [checking, setChecking] = useState(false);
 
-  const taskId = params.taskId as string;
-
-  const [status, setStatus] =
-    useState<AnalysisStatusResponse | null>(
-      null
-    );
-
-  const [error, setError] =
-    useState("");
+  async function checkStatus() {
+    if (!taskId || checking) return;
+    setChecking(true);
+    try {
+      const result = await getAnalysisStatus(taskId);
+      setStatus(result);
+      setError("");
+      if (result.status === "SUCCESS" && result.result?.analysis_id) {
+        router.replace(`/analyses/${result.result.analysis_id}`);
+      } else if (result.status === "FAILURE") {
+        setError(result.error || "The analysis task failed.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to check task status.");
+    } finally {
+      setChecking(false);
+    }
+  }
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    void checkStatus();
+    const timer = window.setInterval(() => { void checkStatus(); }, 2500);
+    return () => window.clearInterval(timer);
+  // checkStatus is intentionally called against the current task ID.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskId]);
 
-    async function checkStatus() {
-      try {
-        const result =
-          await getAnalysisStatus(taskId);
-
-        setStatus(result);
-
-        if (
-          result.status === "SUCCESS" &&
-          result.result?.analysis_id
-        ) {
-          clearInterval(interval);
-
-          router.replace(
-            `/analyses/${result.result.analysis_id}`
-          );
-
-          return;
-        }
-
-        if (
-          result.status === "FAILURE"
-        ) {
-          clearInterval(interval);
-
-          setError(
-            result.error ||
-              "Analysis failed."
-          );
-        }
-      } catch (error) {
-        setError(
-          error instanceof Error
-            ? error.message
-            : "Unable to check analysis status."
-        );
-      }
-    }
-
-    checkStatus();
-
-    interval = setInterval(
-      checkStatus,
-      2000
-    );
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [taskId, router]);
-
-  const currentStatus =
-    status?.status || "PENDING";
-
-  const isFailure =
-    currentStatus === "FAILURE" ||
-    Boolean(error);
+  const currentStatus = status?.status ?? "PENDING";
+  const failed = currentStatus === "FAILURE";
 
   return (
     <AppShell>
-      <div className="mx-auto flex min-h-[75vh] w-full max-w-3xl items-center justify-center px-4 py-10">
-        <div className="w-full">
-
-          {!isFailure ? (
-            <>
-              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-violet-600 text-white">
-                <Brain
-                  size={34}
-                  className="animate-pulse"
-                />
-              </div>
-
-              <div className="mt-7 text-center">
-                <div className="chip border-slate-200 bg-slate-50 text-slate-500">
-                  <Sparkles size={13} />
-
-                  AI analysis in progress
-                </div>
-
-                <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-900">
-                  Analyzing your <span className="text-slate-900">resume</span>
-                </h1>
-
-                <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-500">
-                  We're comparing your resume with
-                  the target job and identifying the
-                  strongest matches and gaps.
-                </p>
-              </div>
-
-              <div className="panel mt-10 p-5 sm:p-7">
-                <StatusStep
-                  icon={FileSearch}
-                  title="Reading your resume"
-                  description="Extracting relevant resume information"
-                  active={
-                    currentStatus ===
-                    "STARTED"
-                  }
-                  complete={
-                    currentStatus ===
-                    "SUCCESS"
-                  }
-                />
-
-                <StatusLine />
-
-                <StatusStep
-                  icon={Brain}
-                  title="AI requirement matching"
-                  description="Comparing job requirements with resume evidence"
-                  active={
-                    currentStatus ===
-                    "STARTED"
-                  }
-                  complete={
-                    currentStatus ===
-                    "SUCCESS"
-                  }
-                />
-
-                <StatusLine />
-
-                <StatusStep
-                  icon={Sparkles}
-                  title="Calculating scores"
-                  description="Generating your final analysis"
-                  active={
-                    currentStatus ===
-                    "STARTED"
-                  }
-                  complete={
-                    currentStatus ===
-                    "SUCCESS"
-                  }
-                />
-              </div>
-
-              <div className="mt-5 flex items-center justify-center gap-2 text-xs text-slate-400">
-                <Loader2
-                  size={13}
-                  className="animate-spin"
-                />
-
-                Status:{" "}
-                {currentStatus}
-              </div>
-            </>
-          ) : (
-            <div className="panel border-rose-200 p-7 text-center sm:p-10">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 text-rose-600">
-                <AlertCircle size={28} />
-              </div>
-
-              <h1 className="mt-5 text-2xl font-bold text-slate-900">
-                Analysis couldn't be completed
-              </h1>
-
-              <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-slate-500">
-                {error}
-              </p>
-
-              <button
-                onClick={() =>
-                  router.push(
-                    "/analyses/new"
-                  )
-                }
-                className="btn-primary mt-7 px-5 py-3"
-              >
-                Try again
-              </button>
+      <div className="mx-auto flex min-h-[75vh] max-w-3xl items-center justify-center px-4 py-10">
+        {failed ? (
+          <div className="panel w-full p-8 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-600"><AlertCircle size={26} /></div>
+            <h1 className="mt-5 text-2xl font-bold text-slate-900">Analysis could not be completed</h1>
+            <p className="mt-3 text-sm text-slate-500">{error || "The background task reported a failure."}</p>
+            <div className="mt-6 flex justify-center gap-3">
+              <button onClick={() => void checkStatus()} className="btn-ghost"><RefreshCw size={15} /> Check again</button>
+              <button onClick={() => router.push("/analyses/new")} className="btn-primary">Back to analysis</button>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="w-full">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-violet-600 text-white"><Brain size={34} className="animate-pulse" /></div>
+            <div className="mt-7 text-center">
+              <span className="chip"><Sparkles size={13} /> Background analysis</span>
+              <h1 className="mt-4 text-3xl font-bold text-slate-900">Analyzing your resume</h1>
+              <p className="mt-3 text-sm text-slate-500">Your analysis runs asynchronously. This page checks the task status and opens the report when it succeeds.</p>
+            </div>
+            <div className="panel mt-9 space-y-5 p-6">
+              <StatusStep icon={FileSearch} title="Resume and job data" active={currentStatus === "STARTED"} complete={currentStatus === "SUCCESS"} />
+              <StatusStep icon={Brain} title="Requirement matching" active={currentStatus === "STARTED"} complete={currentStatus === "SUCCESS"} />
+              <StatusStep icon={Sparkles} title="Score calculation and report" active={currentStatus === "STARTED"} complete={currentStatus === "SUCCESS"} />
+            </div>
+            <p className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-500">
+              {checking ? <Loader2 size={14} className="animate-spin" /> : null}
+              Task status: {currentStatus} · Worker status: {status?.celery_status ?? "Checking"}
+            </p>
+            {error && <p className="mt-3 text-center text-xs text-amber-700">{error} — retrying automatically.</p>}
+          </div>
+        )}
       </div>
     </AppShell>
   );
 }
 
-interface StatusStepProps {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  active: boolean;
-  complete: boolean;
-}
-
-function StatusStep({
-  icon: Icon,
-  title,
-  description,
-  active,
-  complete,
-}: StatusStepProps) {
+function StatusStep({ icon: Icon, title, active, complete }: { icon: React.ElementType; title: string; active: boolean; complete: boolean }) {
   return (
-    <div className="flex items-center gap-4">
-      <div
-        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 ${
-          complete
-            ? "bg-emerald-50 text-emerald-600"
-            : active
-              ? "bg-violet-600 text-white"
-              : "bg-slate-50 text-slate-400"
-        }`}
-      >
-        {complete ? (
-          <CheckCircle2 size={20} />
-        ) : active ? (
-          <Icon
-            size={20}
-            className="animate-pulse"
-          />
-        ) : (
-          <Icon size={20} />
-        )}
+    <div className="flex items-center gap-3">
+      <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${complete ? "bg-emerald-50 text-emerald-600" : active ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-400"}`}>
+        {complete ? <CheckCircle2 size={19} /> : <Icon size={19} className={active ? "animate-pulse" : ""} />}
       </div>
-
-      <div className="min-w-0">
-        <p className="text-sm font-semibold text-slate-900">
-          {title}
-        </p>
-
-        <p className="mt-0.5 text-xs text-slate-500">
-          {description}
-        </p>
-      </div>
-
-      {active && (
-        <Loader2
-          size={16}
-          className="ml-auto shrink-0 animate-spin text-slate-400"
-        />
-      )}
+      <p className="text-sm font-semibold text-slate-800">{title}</p>
+      {active && <Loader2 size={15} className="ml-auto animate-spin text-violet-500" />}
     </div>
-  );
-}
-
-function StatusLine() {
-  return (
-    <div className="ml-5 h-7 border-l border-dashed border-slate-200" />
   );
 }

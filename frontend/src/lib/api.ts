@@ -1,7 +1,7 @@
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL;
 
-  function getCookie(name: string): string | null {
+const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+
+function getCookie(name: string): string | null {
   if (typeof document === "undefined") {
     return null;
   }
@@ -19,14 +19,26 @@ const API_URL =
   return decodeURIComponent(cookie.slice(prefix.length));
 }
 
-export async function apiFetch(
+export async function apiFetch<T = unknown>(
   endpoint: string,
   options: RequestInit = {}
-) {
+): Promise<T> {
+  if (!API_URL) {
+    throw new Error("NEXT_PUBLIC_API_URL is not configured");
+  }
+
   const method = (options.method ?? "GET").toUpperCase();
   const headers = new Headers(options.headers);
 
-  if (options.body && !headers.has("Content-Type")) {
+  const isFormData =
+    typeof FormData !== "undefined" &&
+    options.body instanceof FormData;
+
+  if (
+    options.body &&
+    !isFormData &&
+    !headers.has("Content-Type")
+  ) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -53,6 +65,7 @@ export async function apiFetch(
 
   if (!response.ok) {
     const error = await response.json().catch(() => null);
+
     throw new Error(
       typeof error?.detail === "string"
         ? error.detail
@@ -61,8 +74,8 @@ export async function apiFetch(
   }
 
   if (response.status === 204) {
-    return undefined;
+    return undefined as T;
   }
 
-  return response.json();
+  return response.json() as Promise<T>;
 }

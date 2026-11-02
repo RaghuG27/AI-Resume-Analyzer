@@ -1,245 +1,639 @@
+
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import { useRouter } from "next/navigation";
 
 import {
   ArrowRight,
+  Bookmark,
   BriefcaseBusiness,
+  CheckCircle2,
   ChevronDown,
   Loader2,
-  Plus,
+  MapPin,
+  Search,
   Sparkles,
-  X,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 
 import AppShell from "@/components/layout/AppShell";
-import JobDescriptionForm from "@/components/jobs/JobDescriptionForm";
-import { getJobs, JobResponse } from "@/lib/jobs";
+import { CardGridSkeleton } from "@/components/ui/LoadingSkeleton";
+
+import { apiFetch } from "@/lib/api";
+import { getCurrentUser } from "@/lib/auth";
+
+import {
+  getJobs,
+  JobResponse,
+  saveJob,
+} from "@/lib/jobs";
+
+// ------------------------------------------------------
+// TYPES
+// ------------------------------------------------------
+
+interface SavedJobItem {
+  id: string;
+  job_id: string;
+}
+
+interface CandidateApplication {
+  id: string;
+  job_id: string;
+  status: string;
+}
+
+type ActionKey = `${string}:save` | `${string}:apply`;
+
+// ------------------------------------------------------
+// COMPONENT
+// ------------------------------------------------------
 
 export default function JobsPage() {
   const router = useRouter();
 
   const [jobs, setJobs] = useState<JobResponse[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  const [showForm, setShowForm] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const [savedIds, setSavedIds] = useState<Set<string>>(
+    new Set()
+  );
+
+  const [appliedIds, setAppliedIds] = useState<Set<string>>(
+    new Set()
+  );
+
+  const [expandedId, setExpandedId] = useState<string | null>(
+    null
+  );
+
+  const [search, setSearch] = useState("");
+
+  const [loading, setLoading] = useState(true);
+
+  const [pendingActions, setPendingActions] = useState<Set<ActionKey>>(() => new Set());
+
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  // ------------------------------------------------------
+  // LOAD MARKETPLACE
+  // ------------------------------------------------------
+
+  const loadMarketplace = useCallback(async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const user = await getCurrentUser();
+
+      if (!user.is_active) {
+        router.replace("/login");
+        return;
+      }
+
+      if (user.role !== "candidate") {
+        router.replace(
+          user.role === "admin"
+            ? "/admin"
+            : "/recruiter"
+        );
+        return;
+      }
+
+      // Fetch independent marketplace resources concurrently.
+      // A saved-jobs or applications failure must not block job discovery.
+      const [jobsResult, savedResult, applicationResult] =
+        await Promise.allSettled([
+          getJobs(),
+          apiFetch<{ items: SavedJobItem[] }>("/api/jobs/saved/me"),
+          apiFetch<CandidateApplication[]>("/api/applications/me"),
+        ]);
+
+      if (jobsResult.status === "fulfilled") {
+        setJobs(jobsResult.value);
+      } else {
+        throw jobsResult.reason;
+      }
+
+      if (savedResult.status === "fulfilled") {
+        setSavedIds(
+          new Set(
+            savedResult.value.items.map(
+              (item) => item.job_id
+            )
+          )
+        );
+      } else {
+        console.error(
+          "Failed to load saved jobs:",
+          savedResult.reason
+        );
+      }
+
+      if (applicationResult.status === "fulfilled") {
+        setAppliedIds(
+          new Set(
+            applicationResult.value.map(
+              (item) => item.job_id
+            )
+          )
+        );
+      } else {
+        console.error(
+          "Failed to load applications:",
+          applicationResult.reason
+        );
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load published jobs."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [router]);
 
   useEffect(() => {
-    let active = true;
+    void loadMarketplace();
+  }, [loadMarketplace]);
 
-    async function loadJobs() {
-      try {
-        const data = await getJobs();
+  // ------------------------------------------------------
+  // SEARCH
+  // ------------------------------------------------------
 
-        if (active) {
-          setJobs(data);
-          setError("");
-        }
-      } catch (err) {
-        if (active) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Failed to load jobs."
-          );
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
+  const filteredJobs = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    if (!term) return jobs;
+
+    return jobs.filter((job) => {
+      const searchableValues = [
+        job.title,
+        job.company_name ?? "",
+        job.location ?? "",
+        job.employment_type ?? "",
+        job.description ?? "",
+      ];
+
+      return searchableValues.some((value) =>
+        value.toLowerCase().includes(term)
+      );
+    });
+  }, [jobs, search]);
+
+  // ------------------------------------------------------
+  // EXPAND / COLLAPSE DESCRIPTION
+  // ------------------------------------------------------
+
+  function toggleDescription(jobId: string) {
+    setExpandedId((current) =>
+      current === jobId ? null : jobId
+    );
+  }
+
+  // ------------------------------------------------------
+  // SAVE JOB
+  // ------------------------------------------------------
+
+  async function handleSave(job: JobResponse) {
+    if (savedIds.has(job.id)) return;
+
+    const actionKey: ActionKey = `${job.id}:save`;
+    if (pendingActions.has(actionKey)) return;
+
+    setError("");
+    setNotice("");
+
+    setPendingActions((current) => new Set(current).add(actionKey));
+
+    // Optimistic update.
+    setSavedIds((current) => {
+      const updated = new Set(current);
+      updated.add(job.id);
+      return updated;
+    });
+
+    try {
+      await saveJob(job.id);
+
+      setNotice(
+        `"${job.title}" added to your saved jobs.`
+      );
+    } catch (err) {
+      // Roll back on failure.
+      setSavedIds((current) => {
+        const updated = new Set(current);
+        updated.delete(job.id);
+        return updated;
+      });
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to save this job."
+      );
+    } finally {
+      setPendingActions((current) => { const next = new Set(current); next.delete(actionKey); return next; });
     }
-
-    loadJobs();
-
-    return () => {
-      active = false;
-    };
-  }, [reloadKey]);
-
-  function handleCreated() {
-    setShowForm(false);
-    setLoading(true);
-    setReloadKey((key) => key + 1);
   }
 
-  function toggleJob(id: string) {
-    setExpandedId((current) => (current === id ? null : id));
+  // ------------------------------------------------------
+  // APPLY FOR JOB
+  // ------------------------------------------------------
+
+  async function handleApply(job: JobResponse) {
+    if (appliedIds.has(job.id)) return;
+
+    const actionKey: ActionKey = `${job.id}:apply`;
+    if (pendingActions.has(actionKey)) return;
+
+    setError("");
+    setNotice("");
+
+    setPendingActions((current) => new Set(current).add(actionKey));
+
+    // Optimistic update.
+    setAppliedIds((current) => {
+      const updated = new Set(current);
+      updated.add(job.id);
+      return updated;
+    });
+
+    try {
+      await apiFetch(
+        `/api/jobs/${job.id}/applications`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            cover_letter: null,
+          }),
+        }
+      );
+
+      setNotice(
+        `Your application for "${job.title}" was submitted successfully.`
+      );
+    } catch (err) {
+      // Roll back on failure.
+      setAppliedIds((current) => {
+        const updated = new Set(current);
+        updated.delete(job.id);
+        return updated;
+      });
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to submit your application."
+      );
+    } finally {
+      setPendingActions((current) => { const next = new Set(current); next.delete(actionKey); return next; });
+    }
   }
 
-  function analyzeJob(id: string) {
-    router.push(`/analyses/new?jobId=${id}`);
+  // ------------------------------------------------------
+  // ANALYZE RESUME
+  // ------------------------------------------------------
+
+  function handleAnalyze(job: JobResponse) {
+    // The job ID is an internal reference.
+    // The backend must load the actual job title and
+    // description using this ID for analysis.
+    //
+    // The candidate does not need to enter a job ID.
+
+    const params = new URLSearchParams({
+      jobId: job.id,
+    });
+
+    router.push(`/analyses/new?${params.toString()}`);
   }
+
+  // ------------------------------------------------------
+  // RENDER
+  // ------------------------------------------------------
 
   return (
     <AppShell>
-      <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 lg:px-10">
+      <div className="mx-auto max-w-6xl space-y-6 p-5 sm:p-8">
 
-        {/* Header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        {/* HEADER */}
+        <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-              Jobs
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-violet-700">
+              <BriefcaseBusiness size={17} />
+              Candidate marketplace
+            </div>
+
+            <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">
+              Explore Jobs
             </h1>
 
-            <p className="mt-1.5 text-sm text-slate-500">
-              Your saved job descriptions. Click a job to analyse
-              it against a resume.
+            <p className="mt-1 text-sm text-slate-500">
+              Discover opportunities, save interesting jobs
+              and compare them with your resume.
             </p>
           </div>
 
           <button
-            onClick={() => setShowForm((value) => !value)}
-            className={
-              showForm
-                ? "btn-ghost shrink-0 px-4 py-2.5"
-                : "btn-primary shrink-0 px-4 py-2.5"
-            }
+            type="button"
+            onClick={() => void loadMarketplace()}
+            disabled={loading}
+            className="btn-ghost"
           >
-            {showForm ? (
-              <>
-                <X className="h-4 w-4" />
-                Close
-              </>
-            ) : (
-              <>
-                <Plus className="h-4 w-4" />
-                New job
-              </>
-            )}
+            <RefreshCw
+              size={16}
+              className={loading ? "animate-spin" : ""}
+            />
+            Refresh
           </button>
+
+        </header>
+
+        {/* SEARCH */}
+        <div className="relative">
+
+          <Search
+            size={18}
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+          />
+
+          <input
+            type="search"
+            value={search}
+            onChange={(event) =>
+              setSearch(event.target.value)
+            }
+            placeholder="Search by job title, company, skills or location..."
+            className="field py-3 pl-10 pr-4 text-sm"
+          />
+
         </div>
 
-        {/* Add job form */}
-        {showForm && (
-          <section className="panel mt-6 p-5 sm:p-7">
-            <div className="mb-6 flex items-center gap-3 border-b border-slate-100 pb-5">
-              <div className="icon-tile flex h-10 w-10">
-                <BriefcaseBusiness className="h-5 w-5" />
-              </div>
-
-              <div>
-                <h2 className="font-semibold text-slate-900">
-                  Add a job description
-                </h2>
-
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Paste the role you&apos;re targeting.
-                </p>
-              </div>
-            </div>
-
-            <JobDescriptionForm onCreated={handleCreated} />
-          </section>
-        )}
-
-        {/* Loading */}
-        {loading && (
-          <div className="flex min-h-[40vh] items-center justify-center">
-            <div className="flex items-center gap-3 text-sm text-slate-500">
-              <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-              Loading jobs...
-            </div>
+        {/* NOTIFICATIONS */}
+        {notice && (
+          <div
+            role="status"
+            className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
+          >
+            <CheckCircle2 size={17} />
+            {notice}
           </div>
         )}
 
-        {/* Error */}
-        {!loading && error && (
-          <div className="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-            {error}
+        {error && (
+          <div
+            role="alert"
+            className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+          >
+            <AlertCircle size={17} />
+            <span>{error}</span>
           </div>
         )}
 
-        {/* Empty state */}
-        {!loading && !error && jobs.length === 0 && !showForm && (
-          <div className="panel mt-6 flex flex-col items-center px-6 py-16 text-center">
-            <div className="icon-tile flex h-14 w-14">
-              <BriefcaseBusiness className="h-6 w-6" />
-            </div>
+        {/* LOADING */}
+        {loading ? (
+          <CardGridSkeleton cards={6} />
+        ) : filteredJobs.length === 0 ? (
 
-            <h2 className="mt-5 text-base font-semibold text-slate-900">
-              No jobs yet
+          /* EMPTY STATE */
+          <div className="panel p-12 text-center">
+
+            <BriefcaseBusiness
+              size={36}
+              className="mx-auto text-slate-300"
+            />
+
+            <h2 className="mt-4 font-semibold text-slate-900">
+              {search
+                ? "No matching jobs found"
+                : "No jobs available"}
             </h2>
 
-            <p className="mx-auto mt-1.5 max-w-sm text-sm text-slate-500">
-              Add a job description to start matching it against
-              your resumes.
+            <p className="mt-1 text-sm text-slate-500">
+              {search
+                ? "Try a different search term."
+                : "Published opportunities will appear here when recruiters post them."}
             </p>
 
-            <button
-              onClick={() => setShowForm(true)}
-              className="btn-primary mt-6 px-5 py-2.5"
-            >
-              <Plus className="h-4 w-4" />
-              Add job
-            </button>
-          </div>
-        )}
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="mt-4 text-sm font-semibold text-violet-600 hover:text-violet-800"
+              >
+                Clear search
+              </button>
+            )}
 
-        {/* Jobs list */}
-        {!loading && jobs.length > 0 && (
-          <div className="mt-6 space-y-3">
-            {jobs.map((job) => {
-              const isOpen = expandedId === job.id;
+          </div>
+
+        ) : (
+
+          /* JOB LIST */
+          <div className="space-y-4">
+
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-slate-500">
+                {filteredJobs.length} published opportunities
+              </p>
+            </div>
+
+            {filteredJobs.map((job) => {
+              const expanded = expandedId === job.id;
+              const saved = savedIds.has(job.id);
+              const applied = appliedIds.has(job.id);
+
+              const saving = pendingActions.has(`${job.id}:save`);
+              const applying = pendingActions.has(`${job.id}:apply`);
 
               return (
-                <div key={job.id} className="panel overflow-hidden">
-                  {/* Row */}
+                <article
+                  key={job.id}
+                  className="panel overflow-hidden transition-all duration-200 hover:shadow-md"
+                >
+
+                  {/* JOB HEADER */}
                   <button
-                    onClick={() => toggleJob(job.id)}
-                    className="flex w-full items-center gap-4 p-5 text-left transition hover:bg-slate-50"
+                    type="button"
+                    onClick={() =>
+                      toggleDescription(job.id)
+                    }
+                    aria-expanded={expanded}
+                    aria-controls={`job-description-${job.id}`}
+                    className="flex w-full cursor-pointer items-start gap-4 p-5 text-left transition hover:bg-slate-50"
                   >
-                    <div className="icon-tile flex h-11 w-11 shrink-0">
-                      <BriefcaseBusiness className="h-5 w-5" />
+
+                    <div className="icon-tile flex h-12 w-12 shrink-0 items-center justify-center">
+                      <BriefcaseBusiness size={21} />
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <h3 className="truncate font-semibold text-slate-900">
-                        {job.title}
-                      </h3>
 
-                      <p className="mt-1 font-mono text-xs text-slate-400">
-                        ID: {job.id}
+                      <h2 className="font-semibold text-slate-900">
+                        {job.title}
+                      </h2>
+
+                      <p className="mt-1 text-sm font-medium text-slate-600">
+                        {job.company_name || "Company"}
                       </p>
+
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-400">
+
+                        {job.location && (
+                          <span className="flex items-center gap-1">
+                            <MapPin size={13} />
+                            {job.location}
+                          </span>
+                        )}
+
+                        {job.employment_type && (
+                          <span>
+                            {job.employment_type}
+                          </span>
+                        )}
+
+                      </div>
+
                     </div>
 
-                    <ChevronDown
-                      className={`h-5 w-5 shrink-0 text-slate-400 transition-transform ${
-                        isOpen ? "rotate-180" : ""
-                      }`}
-                    />
+                    {/* EXPAND ARROW */}
+                    <div className="flex shrink-0 items-center gap-1 pt-1 text-xs text-slate-400">
+
+                      <span className="hidden sm:block">
+                        {expanded ? "Hide details" : "View details"}
+                      </span>
+
+                      <ChevronDown
+                        size={20}
+                        className={`transition-transform duration-200 ${
+                          expanded ? "rotate-180" : ""
+                        }`}
+                      />
+
+                    </div>
+
                   </button>
 
-                  {/* Expanded detail + analyse action */}
-                  {isOpen && (
-                    <div className="border-t border-slate-100 p-5">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                        Description
-                      </p>
+                  {/* JOB DESCRIPTION */}
+                  {expanded && (
+                    <div
+                      id={`job-description-${job.id}`}
+                      className="border-t border-slate-100 p-5"
+                    >
 
-                      <p className="mt-2 max-h-56 overflow-y-auto whitespace-pre-wrap text-sm leading-6 text-slate-600">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Job Description
+                      </h3>
+
+                      <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-slate-600">
                         {job.description}
                       </p>
 
-                      <div className="mt-5 flex justify-end">
+                      {/* ACTION BUTTONS */}
+                      <div className="mt-6 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+
+                        {/* SAVE */}
                         <button
-                          onClick={() => analyzeJob(job.id)}
-                          className="btn-primary group px-5 py-2.5"
+                          type="button"
+                          disabled={saved || saving}
+                          onClick={() =>
+                            void handleSave(job)
+                          }
+                          className="btn-ghost disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          <Sparkles className="h-4 w-4" />
-                          Analyse this job
-                          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+
+                          {saving ? (
+                            <Loader2
+                              size={16}
+                              className="animate-spin"
+                            />
+                          ) : saved ? (
+                            <CheckCircle2 size={16} />
+                          ) : (
+                            <Bookmark size={16} />
+                          )}
+
+                          {saving
+                            ? "Saving..."
+                            : saved
+                              ? "Saved"
+                              : "Save"}
+
                         </button>
+
+                        {/* APPLY */}
+                        <button
+                          type="button"
+                          disabled={applied || applying}
+                          onClick={() =>
+                            void handleApply(job)
+                          }
+                          className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+
+                          {applying ? (
+                            <Loader2
+                              size={16}
+                              className="animate-spin"
+                            />
+                          ) : applied ? (
+                            <CheckCircle2 size={16} />
+                          ) : (
+                            <ArrowRight size={16} />
+                          )}
+
+                          {applying
+                            ? "Applying..."
+                            : applied
+                              ? "Applied"
+                              : "Apply"}
+
+                        </button>
+
+                        {/* ANALYZE */}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleAnalyze(job)
+                          }
+                          className="btn-ghost text-violet-700 hover:bg-violet-50"
+                        >
+
+                          <Sparkles size={16} />
+
+                          Analyze Resume
+
+                        </button>
+
                       </div>
+
+                      {/* ACTION INFO */}
+                      {applied && (
+                        <p className="mt-3 flex items-center gap-2 text-xs text-emerald-600">
+                          <CheckCircle2 size={14} />
+                          You have already applied for this position.
+                        </p>
+                      )}
+
                     </div>
                   )}
-                </div>
+
+                </article>
               );
             })}
+
           </div>
         )}
 

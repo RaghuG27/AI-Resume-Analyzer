@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import AppShell from "@/components/layout/AppShell";
+import { CardGridSkeleton } from "@/components/ui/LoadingSkeleton";
+import { apiFetch } from "@/lib/api";
 import {
   BriefcaseBusiness,
   RefreshCw,
@@ -13,10 +16,10 @@ import {
 
 type Status =
   | "applied"
+  | "reviewing"
   | "shortlisted"
-  | "interview"
-  | "selected"
-  | "rejected";
+  | "rejected"
+  | "withdrawn";
 
 type Application = {
   id: string;
@@ -32,9 +35,6 @@ type Application = {
   updated_at: string;
 };
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
 const STAGES: {
   id: Status;
   label: string;
@@ -48,22 +48,16 @@ const STAGES: {
     badge: "bg-slate-100 text-slate-700",
   },
   {
+    id: "reviewing",
+    label: "Reviewing",
+    color: "border-amber-400",
+    badge: "bg-amber-100 text-amber-700",
+  },
+  {
     id: "shortlisted",
     label: "Shortlisted",
     color: "border-violet-400",
     badge: "bg-violet-100 text-violet-700",
-  },
-  {
-    id: "interview",
-    label: "Interview",
-    color: "border-blue-400",
-    badge: "bg-blue-100 text-blue-700",
-  },
-  {
-    id: "selected",
-    label: "Selected",
-    color: "border-emerald-400",
-    badge: "bg-emerald-100 text-emerald-700",
   },
   {
     id: "rejected",
@@ -71,14 +65,20 @@ const STAGES: {
     color: "border-rose-400",
     badge: "bg-rose-100 text-rose-700",
   },
+  {
+    id: "withdrawn",
+    label: "Withdrawn",
+    color: "border-slate-400",
+    badge: "bg-slate-100 text-slate-600",
+  },
 ];
 
 const TRANSITIONS: Record<Status, Status[]> = {
-  applied: ["shortlisted", "rejected"],
-  shortlisted: ["interview", "rejected"],
-  interview: ["selected", "rejected"],
-  selected: [],
+  applied: ["reviewing", "rejected", "withdrawn"],
+  reviewing: ["shortlisted", "rejected", "withdrawn"],
+  shortlisted: ["rejected"],
   rejected: [],
+  withdrawn: [],
 };
 
 export default function RecruitmentPage() {
@@ -94,20 +94,9 @@ export default function RecruitmentPage() {
     setError("");
 
     try {
-      const response = await fetch(
-        `${API_URL}/api/recruitment/applications/?limit=100`,
-        { credentials: "include" }
+      const data = await apiFetch<Application[]>(
+        "/api/recruitment/applications/?limit=100"
       );
-
-      if (!response.ok) {
-        throw new Error(
-          response.status === 401 || response.status === 403
-            ? "Please sign in to view your recruitment pipeline."
-            : "Unable to load applications."
-        );
-      }
-
-      const data: Application[] = await response.json();
       setApplications(data);
     } catch (err) {
       setError(
@@ -148,12 +137,10 @@ export default function RecruitmentPage() {
     setNotice("");
 
     try {
-      const response = await fetch(
-        `${API_URL}/api/recruitment/applications/${application.id}/status`,
+      await apiFetch(
+        `/api/recruitment/applications/${application.id}/status`,
         {
           method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             status: newStatus,
             notes: `Moved from ${application.status} to ${newStatus}`,
@@ -161,20 +148,19 @@ export default function RecruitmentPage() {
         }
       );
 
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        throw new Error(
-          data?.detail ?? "Could not update the application status."
-        );
-      }
+      setApplications((current) =>
+        current.map((item) =>
+          item.id === application.id
+            ? { ...item, status: newStatus, updated_at: new Date().toISOString() }
+            : item
+        )
+      );
 
       setNotice(
         `${application.candidate_name} moved to ${
           STAGES.find((stage) => stage.id === newStatus)?.label
         }.`
       );
-
-      await loadApplications();
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Status update failed."
@@ -185,7 +171,8 @@ export default function RecruitmentPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
+    <AppShell>
+      <div className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1600px]">
         <header className="mb-7 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
@@ -278,10 +265,7 @@ export default function RecruitmentPage() {
         )}
 
         {loading ? (
-          <div className="flex min-h-64 items-center justify-center gap-3 text-slate-500">
-            <LoaderCircle size={22} className="animate-spin" />
-            Loading recruitment pipeline...
-          </div>
+          <CardGridSkeleton cards={5} />
         ) : (
           <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-5">
             {STAGES.map((stage) => {
@@ -414,6 +398,7 @@ export default function RecruitmentPage() {
           </div>
         )}
       </div>
-    </main>
+      </div>
+    </AppShell>
   );
 }

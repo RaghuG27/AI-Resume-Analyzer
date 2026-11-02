@@ -2,7 +2,7 @@ import { apiFetch } from "./api";
 
 export interface AnalysisRequest {
   resume_id: string;
-  job_id: string;
+  job_id: string | null;
 }
 
 export interface AnalysisJobResponse {

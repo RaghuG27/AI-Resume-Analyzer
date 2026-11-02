@@ -12,7 +12,6 @@ import {
   Briefcase,
   GraduationCap,
   FileText,
-  Loader2,
   Sparkles,
 } from "lucide-react";
 
@@ -25,6 +24,7 @@ import {
   LearningPlan,
 } from "@/lib/analysis";
 import LearningHub from "@/components/analysis/LearningHub";
+import { PageSkeleton } from "@/components/ui/LoadingSkeleton";
 
 function scoreText(score: number) {
   if (score >= 80) return "text-emerald-600";
@@ -247,12 +247,7 @@ const [learningLoading, setLearningLoading] =
   if (loading) {
     return (
       <AppShell>
-        <div className="flex min-h-[70vh] items-center justify-center">
-          <div className="flex items-center gap-3 text-sm text-slate-500">
-            <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-            Loading analysis...
-          </div>
-        </div>
+        <PageSkeleton />
       </AppShell>
     );
   }

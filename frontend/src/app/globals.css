@@ -93,3 +93,53 @@ body {
     @apply flex items-center justify-center rounded-xl border border-violet-100 bg-violet-50 text-violet-600;
   }
 }
+
+/* Pointer cursor for interactive elements */
+button:not(:disabled),
+a[href],
+[role="button"],
+[role="tab"],
+summary,
+select,
+label[for] {
+  cursor: pointer;
+}
+
+/* Disabled controls */
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* Interactive cards */
+.card-hover,
+[data-clickable="true"] {
+  cursor: pointer;
+}
+
+/* Consistent interaction feedback across the application. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+a[href] {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+
+@keyframes loading {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  50% {
+    transform: translateX(100%);
+  }
+
+  100% {
+    transform: translateX(300%);
+  }
+}
