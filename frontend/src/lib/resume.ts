@@ -35,10 +35,10 @@ export async function getResumes(): Promise<ResumeResponse[]> {
 export async function getResumeFile(
   resumeId: string
 ): Promise<Blob> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+  const apiUrl = process.env.API_URL?.replace(/\/$/, "");
 
   if (!apiUrl) {
-    throw new Error("NEXT_PUBLIC_API_URL is not configured");
+    throw new Error("API_URL is not configured");
   }
 
   const response = await fetch(
