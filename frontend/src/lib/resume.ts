@@ -35,14 +35,12 @@ export async function getResumes(): Promise<ResumeResponse[]> {
 export async function getResumeFile(
   resumeId: string
 ): Promise<Blob> {
-  const API_URL = "";
 
-  if (!API_URL) {
-    throw new Error("API_URL is not configured");
-  }
+
+  
 
   const response = await fetch(
-    `${API_URL}/api/resumes/${encodeURIComponent(resumeId)}/file`,
+    `/api/resumes/${encodeURIComponent(resumeId)}/file`,
     {
       method: "GET",
       credentials: "include",
