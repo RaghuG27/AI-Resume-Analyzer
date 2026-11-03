@@ -10,9 +10,9 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     CORS_ORIGINS: str = (
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://resumeai-two-umber.vercel.app",
+        "http://localhost:3000,"
+        "http://127.0.0.1:3000,"
+        "https://resumeai-two-umber.vercel.app"
        
     )
 
