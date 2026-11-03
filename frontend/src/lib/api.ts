@@ -1,5 +1,5 @@
 
-const API_URL = process.env.API_URL?.replace(/\/$/, "");
+const API_URL = "/backend";
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") {
