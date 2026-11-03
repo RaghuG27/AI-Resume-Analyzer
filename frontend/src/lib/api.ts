@@ -1,5 +1,5 @@
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+const API_URL = process.env.API_URL?.replace(/\/$/, "");
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") {
@@ -24,7 +24,7 @@ export async function apiFetch<T = unknown>(
   options: RequestInit = {}
 ): Promise<T> {
   if (!API_URL) {
-    throw new Error("NEXT_PUBLIC_API_URL is not configured");
+    throw new Error("API_URL is not configured");
   }
 
   const method = (options.method ?? "GET").toUpperCase();

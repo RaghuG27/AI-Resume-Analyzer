@@ -38,12 +38,47 @@ from app.api.notifications import router as notifications_router
 from app.api.saved_jobs import router as saved_jobs_router
 from app.api.admin import router as admin_router
 
+import os
+import logging
+from urllib.parse import urlparse
+
+import redis.asyncio as redis
+from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+
+load_dotenv(BASE_DIR / ".env", override=False)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+
     redis_url = (
-        settings.RATE_LIMIT_REDIS_URL
-        or settings.REDIS_URL
+        os.getenv("RATE_LIMIT_REDIS_URL")
+        or os.getenv("REDIS_URL")
     )
+
+    if not redis_url:
+        raise RuntimeError(
+            "Neither RATE_LIMIT_REDIS_URL nor REDIS_URL is configured"
+        )
+
+    parsed = urlparse(redis_url)
+
+    # Log connection details without exposing credentials
+    logging.info(
+        "Redis host=%s port=%s scheme=%s",
+        parsed.hostname,
+        parsed.port,
+        parsed.scheme,
+    )
+
+    if parsed.hostname in ("localhost", "127.0.0.1"):
+        raise RuntimeError(
+            "Production Redis URL points to localhost"
+        )
 
     redis_client = redis.from_url(
         redis_url,
@@ -51,7 +86,6 @@ async def lifespan(app: FastAPI):
         decode_responses=True,
         socket_connect_timeout=10,
         socket_timeout=10,
-        health_check_interval=30,
     )
 
     try:
@@ -59,15 +93,11 @@ async def lifespan(app: FastAPI):
 
         await FastAPILimiter.init(redis_client)
 
-        app.state.rate_limit_redis = redis_client
+        app.state.redis = redis_client
 
-        logging.info("Redis connection established successfully")
+        logging.info("Redis connected successfully")
 
         yield
-
-    except Exception:
-        logging.exception("Application startup or runtime failed")
-        raise
 
     finally:
         await redis_client.aclose()
