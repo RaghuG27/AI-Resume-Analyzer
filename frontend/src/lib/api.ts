@@ -23,9 +23,7 @@ export async function apiFetch<T = unknown>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  if (!API_URL) {
-    throw new Error("API_URL is not configured");
-  }
+ 
 
   const method = (options.method ?? "GET").toUpperCase();
   const headers = new Headers(options.headers);
