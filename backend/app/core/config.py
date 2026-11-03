@@ -6,15 +6,16 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str
     DATABASE_URL: str
 
-    ENVIRONMENT: str = "development"
-    DEBUG: bool = True
+    ENVIRONMENT: str = "production"
+    DEBUG: bool = False
 
     CORS_ORIGINS: str = (
-        "http://localhost:3000,"
-        "http://127.0.0.1:3000"
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://resumeai-two-umber.vercel.app",
     )
 
-    COOKIE_SECURE: bool = False
+    COOKIE_SECURE: bool = True
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
