@@ -1,5 +1,5 @@
 
-const API_URL = "/backend";
+const API_URL = "";
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") {

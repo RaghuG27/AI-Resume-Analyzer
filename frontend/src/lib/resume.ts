@@ -35,7 +35,7 @@ export async function getResumes(): Promise<ResumeResponse[]> {
 export async function getResumeFile(
   resumeId: string
 ): Promise<Blob> {
-  const API_URL = "/backend";
+  const API_URL = "";
 
   if (!API_URL) {
     throw new Error("API_URL is not configured");
